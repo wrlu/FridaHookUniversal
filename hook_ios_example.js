@@ -5,10 +5,10 @@ function log_msg(message) {
 function example() {
     var clazz = ObjC.classes.ClassName
 
-    Interceptor.attach(clazz['- method:'].implementation, {
+    Interceptor.attach(clazz['- methodName:'].implementation, {
         onEnter: function (args) {
             // Tips: args[0] is id object, args[1] is SEL object, the real first parameter is args[2]
-            log_msg('Hook -[ClassName method:]')
+            log_msg('Hook -[ClassName methodName:]')
         },
         onLeave: function (retval) {
 
