@@ -1,12 +1,8 @@
-function log_msg(message) {
-    console.log('['+__name+'] '+message)
-}
-
 function hook_openurl() {
     var UIApplication = ObjC.classes.UIApplication
     Interceptor.attach(UIApplication['- _applicationOpenURLAction:payload:origin:'].implementation, {
         onEnter: function (args) {
-            log_msg('URL Scheme: ' + new ObjC.Object(args[2]).url())
+            console.log('URL Scheme: ' + new ObjC.Object(args[2]).url())
         },
         onLeave: function (retval) {
 
@@ -15,7 +11,7 @@ function hook_openurl() {
     
     Interceptor.attach(UIApplication['- activityContinuationManager:continueUserActivity:'].implementation, {
         onEnter: function (args) {
-            log_msg('Universal Link: ' + new ObjC.Object(args[3]).webpageURL())
+            console.log('Universal Link: ' + new ObjC.Object(args[3]).webpageURL())
         },
         onLeave: function (retval) {
 
@@ -23,7 +19,7 @@ function hook_openurl() {
     });
     Interceptor.attach(UIApplication['- openURL:options:completionHandler:'].implementation, {
         onEnter: function (args) {
-            log_msg('Open URL: ' + new ObjC.Object(args[2]))
+            console.log('Open URL: ' + new ObjC.Object(args[2]))
         },
         onLeave: function (retval) {
 

@@ -1,7 +1,3 @@
-function log_msg(message) {
-    console.log('['+__identifier+'] '+message)
-}
-
 function loaddex(dexPath, targetClassName, targetMethod) {
     let activityThreadObj = Java.use('android.app.ActivityThread').currentActivityThread()
     let classLoaderObj = activityThreadObj.getClass().getClassLoader()

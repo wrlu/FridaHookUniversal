@@ -1,7 +1,3 @@
-function log_msg(message) {
-    console.log('['+__identifier+'] '+message)
-}
-
 function hook_gl() {
     // Mali GPU devices (Google Tensor, MTK, Samsung Exynos, Hisilicon before kirin9000 and etc).
     let mali_gles_elf = "libGLES_mali.so";

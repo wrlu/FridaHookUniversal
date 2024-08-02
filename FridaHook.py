@@ -1,10 +1,6 @@
 import sys
 import frida
-
-# Full file name: hook_[platform]_[name].js
-js_modules = [
-    {'platform': 'android', 'name': 'gl'},
-]
+import hashlib
 
 # For frida version 15 or higher
 # Please use real App name for `name` and package name for `identifier` on Android
@@ -40,18 +36,38 @@ class Log:
     def error(msg):
         print('\033[0;31m[Error] ' + msg + '\033[0m')
 
-
-def on_message(message, data):
-    if message['type'] == 'send':
-        Log.send(message['payload'])
-        with open('save.log', 'a+') as f:
-            f.write(message['payload'])
-            f.write('\n')
-    elif message['type'] == 'error':
+def on_message(message):
+    if message['type'] == 'error':
+        Log.error(message['description'])
         Log.error(message['stack'])
     else:
         Log.error(str(message))
 
+unique_shader_hash = []
+
+def on_gl_message(message, data):
+    global unique_shader_hash
+    if message['type'] == 'send':
+        shader_source = message['payload'].encode('utf8')
+        source_hash = get_hash(shader_source)
+        if source_hash not in unique_shader_hash:
+            Log.send('Received shader source: ' + source_hash)
+            unique_shader_hash.append(source_hash)
+            with open('~/shader/glShaderSource' + source_hash + '.txt', 'wb') as f:
+                f.write(shader_source)
+                f.close()
+    else:
+        on_message(message)
+
+# Full file name: hook_[platform]_[name].js
+js_modules = [
+    {'platform': 'android', 'name': 'gl', 'on': on_gl_message},
+]
+
+def get_hash(data):
+    hash = hashlib.sha256()
+    hash.update(data)
+    return hash.hexdigest()
 
 def init_device():
     Log.info('Current frida version: '+str(frida.__version__))
@@ -99,14 +115,12 @@ if __name__ == '__main__':
             
             for js_module in js_modules:
                 full_script_name = 'hook_' + js_module['platform'] + '_' + js_module['name'] + '.js'
-                name_var = 'var __name = "'+per_hook_process['name']+'";'
-                identifier_var = 'var __identifier = "'+per_hook_process['identifier']+'";'
-                
                 with open(full_script_name, 'rb') as f:
-                    Log.info('Inject script name: ' + full_script_name)
-                    script = session.create_script(name_var + identifier_var + f.read().decode('utf8'))
-                
-                script.on('message', on_message)
+                    script = session.create_script(f.read().decode('utf8'))
+                if 'on' in js_module:
+                    script.on('message', js_module['on'])
+                else:
+                    script.on('message', on_message)
                 Log.info('Load script name: ' + full_script_name)
                 script.load()
         
@@ -116,3 +130,4 @@ if __name__ == '__main__':
 
     except Exception as e:
         Log.error(repr(e))
+
