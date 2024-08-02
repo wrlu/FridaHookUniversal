@@ -3,16 +3,20 @@ import frida
 
 # Full file name: hook_[platform]_[name].js
 js_modules = [
-    {'platform': 'ios', 'name': 'scheme'},
+    {'platform': 'android', 'name': 'gl'},
 ]
 
 # For frida version 15 or higher
 # Please use real App name for `name` and package name for `identifier` on Android
 # For Android native processes or iOS processes, keep identifier and name as same
 processes_to_hook = [
-    # {'identifier': 'com.ss.android.ugc.aweme', 'name': '抖音'}, # Android
-    # {'identifier': 'com.ss.iphone.ugc.Aweme', 'name': '抖音'}, # iOS
-    # {'identifier': '95526.mobi', 'name': '北京银行'}, # iOS
+    # Android
+    # {'identifier': 'com.ss.android.ugc.aweme', 'name': '抖音'}, 
+    {'identifier': 'com.meitu.meiyancamera', 'name': '美颜相机'}, 
+
+    # iOS
+    # {'identifier': 'com.ss.iphone.ugc.Aweme', 'name': '抖音'},
+    # {'identifier': '95526.mobi', 'name': '北京银行'},
 ]
 
 class Log:
