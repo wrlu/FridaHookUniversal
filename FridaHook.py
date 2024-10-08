@@ -1,6 +1,8 @@
 import sys
 import frida
 import hashlib
+import json
+from PIL import Image
 
 # For frida version 15 or higher
 # Please use real App name for `name` and package name for `identifier` on Android
@@ -8,11 +10,9 @@ import hashlib
 processes_to_hook = [
     # Android
     # {'identifier': 'com.ss.android.ugc.aweme', 'name': '抖音'}, 
-    {'identifier': 'com.meitu.meiyancamera', 'name': '美颜相机'}, 
 
     # iOS
     # {'identifier': 'com.ss.iphone.ugc.Aweme', 'name': '抖音'},
-    # {'identifier': '95526.mobi', 'name': '北京银行'},
 ]
 
 class Log:
@@ -44,18 +44,41 @@ def on_message(message):
         Log.error(str(message))
 
 unique_shader_hash = []
+unique_texture_hash = []
+
+def glFormat2PILFormat(glFormat):
+    if format == 'GL_RGBA':
+        return 'RGBA'
+    elif format == 'GL_LUMINANCE':
+        return 'L'
+    return 'unsupported'
 
 def on_gl_message(message, data):
     global unique_shader_hash
+    global unique_texture_hash
     if message['type'] == 'send':
-        shader_source = message['payload'].encode('utf8')
-        source_hash = get_hash(shader_source)
-        if source_hash not in unique_shader_hash:
-            Log.send('Received shader source: ' + source_hash)
-            unique_shader_hash.append(source_hash)
-            with open('~/shader/glShaderSource' + source_hash + '.txt', 'wb') as f:
-                f.write(shader_source)
-                f.close()
+        payload = message['payload']
+        if payload.startswith('glTexImage2D:'):
+            if data == None or data == '':
+                return
+            param = json.loads(payload.replace('glTexImage2D:', ''))
+            pilFormat = glFormat2PILFormat(param['format'])
+            if pilFormat != 'unsupported':
+                texture_hash = get_hash(data)
+                if texture_hash not in unique_texture_hash:
+                    Log.send('Received texture: ' + texture_hash + ', datalen: ' + str(len(data)))
+                    unique_texture_hash.append(texture_hash)
+                    rgba_image = Image.frombytes(pilFormat, (param['width'], param['height']), data)
+                    rgba_image.save('texture/glTexImage2D_' + texture_hash + '.png', format='PNG')
+        else:
+            shader_source = payload.encode('utf8')
+            source_hash = get_hash(shader_source)
+            if source_hash not in unique_shader_hash:
+                Log.send('Received shader source: ' + source_hash)
+                unique_shader_hash.append(source_hash)
+                with open('shader/glShaderSource' + source_hash + '.txt', 'wb') as f:
+                    f.write(shader_source)
+                    f.close()
     else:
         on_message(message)
 
