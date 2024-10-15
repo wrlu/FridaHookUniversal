@@ -69,14 +69,14 @@ def on_gl_message(message, data):
                     Log.send('Received texture: ' + texture_hash + ', datalen: ' + str(len(data)))
                     unique_texture_hash.append(texture_hash)
                     rgba_image = Image.frombytes(pilFormat, (param['width'], param['height']), data)
-                    rgba_image.save('texture/glTexImage2D_' + texture_hash + '.png', format='PNG')
+                    rgba_image.save(processes_to_hook[0]['name'] + '/texture/glTexImage2D_' + texture_hash + '.png', format='PNG')
         else:
             shader_source = payload.encode('utf8')
             source_hash = get_hash(shader_source)
             if source_hash not in unique_shader_hash:
                 Log.send('Received shader source: ' + source_hash)
                 unique_shader_hash.append(source_hash)
-                with open('shader/glShaderSource' + source_hash + '.txt', 'wb') as f:
+                with open(processes_to_hook[0]['name'] + '/shader/glShaderSource' + source_hash + '.txt', 'wb') as f:
                     f.write(shader_source)
                     f.close()
     else:
