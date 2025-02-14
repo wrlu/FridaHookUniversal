@@ -50,36 +50,89 @@ function hook_gl_shader() {
 }
 
 function parseFormat(value) {
-    if (value == 0x1908)
-        return 'GL_RGBA'
-    if (value == 0x1909)
-        return 'GL_LUMINANCE'
-    if (value == 0x8814)
-        return 'GL_RGBA32F'
-    return value
+    value = parseInt(value, 16)
+    const formatMap = {
+        0x1903: 'GL_ALPHA',
+        0x1907: 'GL_RGB',
+        0x1908: 'GL_RGBA',
+        0x1909: 'GL_LUMINANCE',
+        0x8814: 'GL_RGBA32F',
+        0x8815: 'GL_RGB32F',
+        0x881a: 'GL_RGBA16F',
+        0x881b: 'GL_RGB16F'
+    };
+    return formatMap[value] || value;
 }
 
 function parseType(value) {
-    if (value == 0x1401)
-        return 'GL_UNSIGNED_BYTE'
-    if (value == 0x1406)
-        return 'GL_FLOAT'
-    return value
+    value = parseInt(value, 16)
+    const typeMap = {
+        0x1400: 'GL_BYTE',
+        0x1401: 'GL_UNSIGNED_BYTE',
+        0x1402: 'GL_SHORT',
+        0x1403: 'GL_UNSIGNED_SHORT',
+        0x1404: 'GL_INT',
+        0x1405: 'GL_UNSIGNED_INT',
+        0x1406: 'GL_FLOAT',
+        0x140B: 'GL_UNSIGNED_BYTE_3_3_2',
+        0x140C: 'GL_UNSIGNED_BYTE_2_3_3_REV',
+        0x140D: 'GL_UNSIGNED_SHORT_5_6_5',
+        0x140E: 'GL_UNSIGNED_SHORT_5_6_5_REV',
+        0x140F: 'GL_UNSIGNED_SHORT_4_4_4_4',
+        0x1410: 'GL_UNSIGNED_SHORT_4_4_4_4_REV',
+        0x1411: 'GL_UNSIGNED_SHORT_5_5_5_1',
+        0x1412: 'GL_UNSIGNED_SHORT_1_5_5_5_REV',
+        0x8033: 'GL_UNSIGNED_INT_8_8_8_8',
+        0x8034: 'GL_UNSIGNED_INT_8_8_8_8_REV',
+        0x8035: 'GL_UNSIGNED_INT_10_10_10_2',
+        0x8036: 'GL_UNSIGNED_INT_2_10_10_10_REV',
+        0x8D61: 'GL_HALF_FLOAT'
+    };
+    return typeMap[value] || value;
 }
 
 function parseTarget(value) {
-    if (value == 0x0DE1)
-        return 'GL_TEXTURE_2D'
-    return value
+    value = parseInt(value, 16)
+    const targetMap = {
+        0xde1: 'GL_TEXTURE_2D'
+    };
+    return targetMap[value] || value;
+}
+
+function getTypeByteSize(typeName) {
+    const typeByteSizes = {
+        'GL_BYTE': 1,
+        'GL_UNSIGNED_BYTE': 1,
+        'GL_SHORT': 2,
+        'GL_UNSIGNED_SHORT': 2,
+        'GL_INT': 4,
+        'GL_UNSIGNED_INT': 4,
+        'GL_FLOAT': 4,
+        'GL_HALF_FLOAT': 2
+    };
+    return typeByteSizes[typeName] || 0;
 }
 
 function getFormatSize(formatName) {
-    if (formatName == 'GL_RGBA' || formatName == 'GL_RGBA32F') {
-        return 4
-    } else if (formatName == 'GL_LUMINANCE') {
-        return 1
+    const formatSizes = {
+        'GL_RGBA': 4,
+        'GL_RGBA32F': 4,
+        'GL_RGBA16F': 4,
+        'GL_LUMINANCE': 1,
+        'GL_RGB': 3,
+        'GL_RGB32F': 3,
+        'GL_RGB16F': 3
+    };
+    return formatSizes[formatName] || 0;
+}
+
+function calculateDataSize(formatName, typeName, width, height) {
+    if (formatName == 'GL_RGBA16F' && typeName == 'GL_FLOAT') {
+        typeName = 'GL_HALF_FLOAT'
     }
-    return 3
+    const formatSize = getFormatSize(formatName);
+    const typeByteSize = getTypeByteSize(typeName);
+    return width * height * formatSize * typeByteSize;
 }
 
 function hook_gl_texture() {
@@ -102,21 +155,46 @@ function hook_gl_texture() {
             let type = args[7]
             let data = args[8]
 
-            let formatName = parseFormat(format)
-            let formatSize = getFormatSize(formatName)
-            let size = width * height * formatSize
-            console.log(`glTexImage2D: target=${parseTarget(target)}, internalformat=${parseFormat(internalformat)}, width=${Number(width)}, height=${Number(height)}, type=${parseType(type)}, data=${data}`)
+            let formatName = parseFormat(format)   
+            let internalformatName = parseFormat(internalformat)
+            let typeName = parseType(type)         
+            const size = calculateDataSize(internalformatName, typeName, width, height);
+            console.log(`glTexImage2D: target=${parseTarget(target)}, format=${formatName}, internalformat=${internalformatName}, width=${Number(width)}, height=${Number(height)}, type=${typeName}, data=${data}`)
             let textureData = data.readByteArray(size)
-            send(`glTexImage2D:{"width": "${Number(width)}", "height": "${Number(height)}", "format": "${parseFormat(format)}", "type": "${parseType(type)}"}`, textureData)
+            send(`glTexImage2D:{"width": ${Number(width)}, "height": ${Number(height)}, "format": "${formatName}", "internalformat": "${internalformatName}", "type": "${typeName}"}`, textureData)
 
+        },
+        onLeave: function(retval) {}
+    })
+
+    let glTexSubImage2D = Module.findExportByName(gles_elf, "glTexSubImage2D")
+    Interceptor.attach(glTexSubImage2D, {
+        onEnter: function(args) {
+            let target = args[0]
+            let level = args[1]
+            let xoffset = args[2]
+            let yoffset = args[3]
+            let width = args[4]
+            let height = args[5]
+            let format = args[6]
+            let type = args[7]
+            let data = args[8]
+
+            let formatName = parseFormat(format)
+            console.log(format)
+            let typeName = parseType(type)
+            const size = calculateDataSize(formatName, typeName, width, height);
+            console.log(`glTexSubImage2D: target=${parseTarget(target)}, xoffset=${Number(xoffset)}, yoffset=${Number(yoffset)}, width=${Number(width)}, height=${Number(height)}, format=${formatName}, type=${typeName}, data=${data}`)
+            let textureData = data.readByteArray(size)
+            send(`glTexSubImage2D:{"xoffset": ${Number(xoffset)}, "yoffset": ${Number(yoffset)}, "width": ${Number(width)}, "height": ${Number(height)}, "format": "${formatName}", "type": "${typeName}"}`, textureData)
         },
         onLeave: function(retval) {}
     })
 }
 
 function main() {
-    // hook_gl_shader()
-    // hook_gl_texture()
+    hook_gl_shader()
+    hook_gl_texture()
 }
 
 setImmediate(main);

@@ -1,7 +1,11 @@
 import sys
+import os
 import frida
 import hashlib
 import json
+import numpy
+import OpenEXR
+import Imath
 from PIL import Image
 
 # For frida version 15 or higher
@@ -9,7 +13,9 @@ from PIL import Image
 # For Android native processes or iOS processes, keep identifier and name as same
 processes_to_hook = [
     # Android
-    # {'identifier': 'com.ss.android.ugc.aweme', 'name': '抖音'}, 
+    # {'identifier': 'com.ss.android.ugc.aweme', 'name': '抖音'},
+    {'identifier': 'com.mt.mtxx.mtxx', 'name': '美图秀秀'},
+    # {'identifier': 'com.accordion.prettyo.cn', 'name': 'PrettyUp视频p图'},
 
     # iOS
     # {'identifier': 'com.ss.iphone.ugc.Aweme', 'name': '抖音'},
@@ -47,11 +53,89 @@ unique_shader_hash = []
 unique_texture_hash = []
 
 def glFormat2PILFormat(glFormat):
-    if format == 'GL_RGBA':
+    if glFormat == 'GL_RGBA':
         return 'RGBA'
-    elif format == 'GL_LUMINANCE':
+    elif glFormat == 'GL_LUMINANCE':
         return 'L'
     return 'unsupported'
+
+# 保存OpenGL shader source
+def saveShader(payload):
+    shader_source = payload.encode('utf8')
+    source_hash = get_hash(shader_source)
+    if source_hash not in unique_shader_hash:
+        Log.send('Received shader source: ' + source_hash)
+        unique_shader_hash.append(source_hash)
+        with open(processes_to_hook[0]['identifier'] + '/shader/glShaderSource_' + source_hash + '.txt', 'wb') as f:
+            f.write(shader_source)
+            f.close()
+
+# 尝试使用PIL处理SDR图像，例如GL_RGBA和GL_LUMINANCE
+def saveSdrImageWithPil(param, data):
+    pilFormat = glFormat2PILFormat(param['internalformat'])
+    if pilFormat != 'unsupported':
+        texture_hash = get_hash(data)
+        if texture_hash not in unique_texture_hash:
+            Log.send('Received SDR texture: ' + texture_hash + ', datalen: ' + str(len(data)))
+            unique_texture_hash.append(texture_hash)
+            rgba_image = Image.frombytes(pilFormat, (param['width'], param['height']), data)
+            rgba_image.save(processes_to_hook[0]['identifier'] + '/texture/glTexImage2D_' + texture_hash + '.png', format='PNG')
+        return True
+    else:
+        return False
+
+# 尝试使用OpenEXR处理HDR图像
+def saveHdrImageWithOpenExr(param, data):
+    texture_hash = get_hash(data)
+    if texture_hash not in unique_texture_hash:
+        Log.send('Received HDR texture: ' + texture_hash + ', datalen: ' + str(len(data)))
+        # 根据不同的格式确定数据类型和像素类型
+        if param['internalformat'] == 'GL_RGBA32F':
+            dtype = numpy.float32
+            pixel_type = Imath.PixelType.FLOAT
+            channels = 4
+        elif param['internalformat'] == 'GL_RGBA16F':
+            dtype = numpy.float16
+            pixel_type = Imath.PixelType.HALF
+            channels = 4
+        elif param['internalformat'] == 'GL_RGB32F':
+            dtype = numpy.float32
+            pixel_type = Imath.PixelType.FLOAT
+            channels = 3
+        elif param['internalformat'] == 'GL_RGB16F':
+            dtype = numpy.float16
+            pixel_type = Imath.PixelType.HALF
+            channels = 3
+        else:
+            Log.warn('Unsupported')
+            return
+        
+        pixels = numpy.frombuffer(data, dtype=dtype)
+        pixels = pixels.reshape((int(param['height']), int(param['width']), channels))
+        if channels == 4:
+            r = pixels[:, :, 0].flatten().astype(dtype).tobytes()
+            g = pixels[:, :, 1].flatten().astype(dtype).tobytes()
+            b = pixels[:, :, 2].flatten().astype(dtype).tobytes()
+            a = pixels[:, :, 3].flatten().astype(dtype).tobytes()
+            channel_names = "RGBA"
+            channel_data = {'R': r, 'G': g, 'B': b, 'A': a}
+        elif channels == 3:
+            r = pixels[:, :, 0].flatten().astype(dtype).tobytes()
+            g = pixels[:, :, 1].flatten().astype(dtype).tobytes()
+            b = pixels[:, :, 2].flatten().astype(dtype).tobytes()
+            channel_names = "RGB"
+            channel_data = {'R': r, 'G': g, 'B': b}
+        
+        header = OpenEXR.Header(int(param['width']), int(param['height']))
+        half_chan = Imath.Channel(Imath.PixelType(pixel_type))
+        header['channels'] = dict([(c, half_chan) for c in channel_names])
+
+        path = os.getcwd() + os.sep + processes_to_hook[0]['identifier'] + os.sep + 'texture' + os.sep + 'glTexImage2D_' + texture_hash + '.exr'
+
+        out = OpenEXR.OutputFile(path, header)
+        out.writePixels(channel_data)
+        out.close()
+        unique_texture_hash.append(texture_hash)
 
 def on_gl_message(message, data):
     global unique_shader_hash
@@ -60,31 +144,31 @@ def on_gl_message(message, data):
         payload = message['payload']
         if payload.startswith('glTexImage2D:'):
             if data == None or data == '':
+                Log.println('data is None')
                 return
             param = json.loads(payload.replace('glTexImage2D:', ''))
-            pilFormat = glFormat2PILFormat(param['format'])
-            if pilFormat != 'unsupported':
-                texture_hash = get_hash(data)
-                if texture_hash not in unique_texture_hash:
-                    Log.send('Received texture: ' + texture_hash + ', datalen: ' + str(len(data)))
-                    unique_texture_hash.append(texture_hash)
-                    rgba_image = Image.frombytes(pilFormat, (param['width'], param['height']), data)
-                    rgba_image.save(processes_to_hook[0]['name'] + '/texture/glTexImage2D_' + texture_hash + '.png', format='PNG')
+            if saveSdrImageWithPil(param, data):
+                return
+            if saveHdrImageWithOpenExr(param, data):
+                return
+        elif payload.startswith('glTexSubImage2D:'):
+            if data == None or data == '':
+                Log.println('data is None')
+                return
+            param = json.loads(payload.replace('glTexSubImage2D:', ''))
+            if saveSdrImageWithPil(param, data):
+                return
+            if saveHdrImageWithOpenExr(param, data):
+                return
         else:
-            shader_source = payload.encode('utf8')
-            source_hash = get_hash(shader_source)
-            if source_hash not in unique_shader_hash:
-                Log.send('Received shader source: ' + source_hash)
-                unique_shader_hash.append(source_hash)
-                with open(processes_to_hook[0]['name'] + '/shader/glShaderSource' + source_hash + '.txt', 'wb') as f:
-                    f.write(shader_source)
-                    f.close()
+            saveShader(payload)
     else:
         on_message(message)
 
 # Full file name: hook_[platform]_[name].js
 js_modules = [
     {'platform': 'android', 'name': 'gl', 'on': on_gl_message},
+    {'platform': 'android', 'name': 'asset', 'on': on_message},
 ]
 
 def get_hash(data):
