@@ -167,9 +167,9 @@ def on_gl_message(message, data):
 
 # Full file name: hook_[platform]_[name].js
 js_modules = [
-    {'platform': 'android', 'name': 'gl', 'on': on_gl_message},
+    # {'platform': 'android', 'name': 'gl', 'on': on_gl_message},
     {'platform': 'android', 'name': 'asset', 'on': on_message},
-    {'platform': 'android', 'name': 'mtxx', 'on': on_message},
+    {'platform': 'android', 'name': 'mt', 'on': on_message},
 ]
 
 def get_hash(data):
