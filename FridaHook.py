@@ -14,8 +14,8 @@ from PIL import Image
 processes_to_hook = [
     # Android
     # {'identifier': 'com.ss.android.ugc.aweme', 'name': '抖音'},
-    {'identifier': 'com.mt.mtxx.mtxx', 'name': '美图秀秀'},
-    # {'identifier': 'com.accordion.prettyo.cn', 'name': 'PrettyUp视频p图'},
+    # {'identifier': 'com.mt.mtxx.mtxx', 'name': '美图秀秀'},
+    {'identifier': 'com.meitu.wink', 'name': 'Wink'},
 
     # iOS
     # {'identifier': 'com.ss.iphone.ugc.Aweme', 'name': '抖音'},
@@ -169,6 +169,7 @@ def on_gl_message(message, data):
 js_modules = [
     {'platform': 'android', 'name': 'gl', 'on': on_gl_message},
     {'platform': 'android', 'name': 'asset', 'on': on_message},
+    {'platform': 'android', 'name': 'mtxx', 'on': on_message},
 ]
 
 def get_hash(data):

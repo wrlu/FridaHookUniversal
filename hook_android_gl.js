@@ -1,10 +1,18 @@
-function hook_gl_shader() {
-    // Mali GPU devices (Google Tensor, MTK, Samsung Exynos, Hisilicon before kirin9000 and etc).
-    let mali_gles_elf = "libGLES_mali.so";
-    // Qualcomm Adreno GPU devices.
-    let adreno_gles_elf = "libGLESv2_adreno.so";
-    let gles_elf = mali_gles_elf
-    
+function printStackTrace(context) {
+    let backtrace = Thread.backtrace(context, Backtracer.ACCURATE);
+    let symbols = backtrace.map(DebugSymbol.fromAddress);
+    symbols.forEach(function (symbol, index) {
+        console.log("  " + (index + 1) + ". " + symbol);
+    });
+}
+
+// Qualcomm Adreno GPU devices.
+let ADRENO_GLES_ELF = "libGLESv2_adreno.so";
+// Mali GPU devices (Google Tensor, MTK, Samsung Exynos, Hisilicon before kirin9000 and etc).
+let MALI_GLES_ELF = "libGLES_mali.so";
+let gles_elf = MALI_GLES_ELF
+
+function hook_gl_shader() {    
     let glGetProgramiv = new NativeFunction(Module.findExportByName(gles_elf, "glGetProgramiv"), 'void', ['pointer', 'int', 'pointer'])
     let glGetAttachedShaders = new NativeFunction(Module.findExportByName(gles_elf, "glGetAttachedShaders"), 'void', ['pointer', 'int', 'pointer', 'pointer'])
     let glGetShaderiv = new NativeFunction(Module.findExportByName(gles_elf, "glGetShaderiv"), 'void', ['uint', 'int', 'pointer'])
@@ -99,6 +107,16 @@ function parseTarget(value) {
     return targetMap[value] || value;
 }
 
+function parseUsage(value) {
+    value = parseInt(value, 16)
+    const targetMap = {
+        0x88e0: 'GL_STREAM_DRAW',
+        0x88e4: 'GL_STATIC_DRAW',
+        0x88e8: 'GL_DYNAMIC_DRAW'
+    };
+    return targetMap[value] || value;
+}
+
 function getTypeByteSize(typeName) {
     const typeByteSizes = {
         'GL_BYTE': 1,
@@ -136,12 +154,6 @@ function calculateDataSize(formatName, typeName, width, height) {
 }
 
 function hook_gl_texture() {
-    // Mali GPU devices (Google Tensor, MTK, Samsung Exynos, Hisilicon before kirin9000 and etc).
-    let mali_gles_elf = "libGLES_mali.so";
-    // Qualcomm Adreno GPU devices.
-    let adreno_gles_elf = "libGLESv2_adreno.so";
-    let gles_elf = mali_gles_elf
-
     let glTexImage2D = Module.findExportByName(gles_elf, "glTexImage2D")
     Interceptor.attach(glTexImage2D, {
         onEnter: function(args) {
@@ -192,9 +204,25 @@ function hook_gl_texture() {
     })
 }
 
+function hook_gl_bufferdata() {
+    let glBufferData = Module.findExportByName(gles_elf, "glBufferData")
+    Interceptor.attach(glBufferData, {
+        onEnter: function(args) {
+            let buffer = args[0]
+            let bytesize = args[1]
+            let data = args[2]
+            let usage = args[3]
+            console.log(`glBufferData: buffer=${Number(buffer)}, bytesize=${Number(bytesize)}, data=${data}, usage=${parseUsage(usage)}`)
+            printStackTrace(this.context);
+        },
+        onLeave: function(retval) {}
+    })
+}
+
 function main() {
-    hook_gl_shader()
-    hook_gl_texture()
+    // hook_gl_shader()
+    // hook_gl_texture()
+    // hook_gl_bufferdata()
 }
 
 setImmediate(main);

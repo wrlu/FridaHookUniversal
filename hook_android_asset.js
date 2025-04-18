@@ -1,3 +1,11 @@
+function printStackTrace(context) {
+    let backtrace = Thread.backtrace(context, Backtracer.ACCURATE);
+    let symbols = backtrace.map(DebugSymbol.fromAddress);
+    symbols.forEach(function (symbol, index) {
+        console.log("  " + (index + 1) + ". " + symbol);
+    });
+}
+
 function hook_native_asset() {
     Interceptor.attach(Module.findExportByName("libandroid.so", "AAssetManager_open"), {
         onEnter: function(args) {
